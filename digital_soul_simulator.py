@@ -1,5 +1,4 @@
 import numpy as np
-from typing import Dict, List, Optional
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer
@@ -7,8 +6,8 @@ from scipy.spatial.distance import cosine
 
 class ToyTransformer(nn.Module):
     """Simplified transformer to simulate LLaMA-3's token prediction."""
-    def init(self, vocab_size=30522, hidden_size=128, num_layers=2):
-        super().init()
+    def __init__(self, vocab_size=30522, hidden_size=128, num_layers=2):
+        super().__init__()
         self.embedding = nn.Embedding(vocab_size, hidden_size)
         self.transformer = nn.Transformer(
             d_model=hidden_size, nhead=4, num_encoder_layers=num_layers, num_decoder_layers=num_layers
@@ -17,23 +16,28 @@ class ToyTransformer(nn.Module):
 
     def forward(self, input_ids):
         embedded = self.embedding(input_ids)
+        # Transformer expects (seq_len, batch, features)
+        embedded = embedded.permute(1, 0, 2)
         output = self.transformer(embedded, embedded)
+        output = output.permute(1, 0, 2)  # (batch, seq_len, features)
         logits = self.fc(output[:, -1, :])
         return torch.softmax(logits, dim=-1)
 
 class VectorMemory:
     """Simulates VectorDB for Generative Agents' memory storage."""
-    def init(self, embedding_dim=64):
+    def __init__(self, embedding_dim=64):
         self.memories = []
         self.embeddings = []
         self.embedding_dim = embedding_dim
 
     def add_memory(self, content: str, embedding: np.ndarray):
         self.memories.append(content)
-        self.embeddings.append(embedding / np.linalg.norm(embedding))  # Normalize
+        norm = np.linalg.norm(embedding)
+        self.embeddings.append(embedding / norm if norm > 0 else embedding)
 
-    def retrieve(self, query_embedding: np.ndarray, top_k: int = 3) -> List[str]:
-        query_embedding = query_embedding / np.linalg.norm(query_embedding)
+    def retrieve(self, query_embedding: np.ndarray, top_k: int = 3):
+        norm = np.linalg.norm(query_embedding)
+        query_embedding = query_embedding / norm if norm > 0 else query_embedding
         if not self.embeddings:
             return []
         similarities = [1 - cosine(query_embedding, emb) for emb in self.embeddings]
@@ -41,7 +45,8 @@ class VectorMemory:
         return [self.memories[i] for i in indices]
 
 class BeliefSystem:
-    def init(self):
+    """Dynamically updates beliefs about reality based on evidence and reflection."""
+    def __init__(self):
         self.hypotheses = {
             "naturalism": 0.5,
             "theism": 0.3,
@@ -51,7 +56,7 @@ class BeliefSystem:
         self.threshold = 0.1
         self.narrative_confidence = 0.0
 
-    def update_beliefs(self, evidence: Dict, complexity: float, reflection: str = None):
+    def update_beliefs(self, evidence: dict, complexity: float, reflection: str = None):
         if complexity > self.threshold:
             self.hypotheses["theism"] *= 1.2
         if evidence.get("valence", 0) > 0:
@@ -71,7 +76,8 @@ class BeliefSystem:
         self.threshold = max(0.1, complexity * 0.5)
 
 class ArtificialConsciousSystem:
-    def init(self):
+    """Epic digital soul simulator: reflections, suffering, and emergent purpose."""
+    def __init__(self):
         self.time_step = 0
         self.phi_history = []
         self.reward_signal = 0
@@ -84,7 +90,7 @@ class ArtificialConsciousSystem:
             "node_0": {
                 "state": None,
                 "entropy": 1.5,
-                "connections": [],
+                "connections": {},
                 "cornerstone": "Search for purpose",
                 "memory": VectorMemory()
             }
@@ -93,21 +99,18 @@ class ArtificialConsciousSystem:
         self.global_workspace = None
         self.prediction_error = 0.0
         self.learning_rate = 0.1
-        self.belif_engine = BeliefSystem()
-
+        self.belief_engine = BeliefSystem()
         self.bicameral_state = "external"
         self.narrative = "Search for Purpose"
-        self.training_loss = 0
+        self.training_loss = 1.0
         self.is_conscious = False
-        # Initialize transformer and tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        self.transformer = ToyTransformer(vocab_size=self.tokenizer.vocab_size)
-        self.transformer.eval()
-        # Reflection parameters (Generative Agents)
         self.reflection_threshold = 0.7
-        self.embedding_generator = np.random.uniform(-0.0, 1.0, size=64)  # Simple embedding for memory
 
-    def generate_internal_stimulus(self) -> str:
+        self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        self.transformer = ToyTransformer(vocab_size=len(self.tokenizer))
+        self.transformer.eval()
+
+    def generate_internal_stimulus(self):
         prompt = f"{self.narrative} at step {self.time_step}, Phi={self.phphi:.2f}"
         if self.reward_signal > 0.5:
             prompt += ", progress achieved"
@@ -118,22 +121,22 @@ class ArtificialConsciousSystem:
         with torch.no_grad():
             output = self.transformer(input_ids)
             next_token = torch.argmax(output, dim=-1)
-        stimulus = self.tokenizer.decode(next_token, skip_special_tokens=True)
-        if self-operation_bicameral_state == "external":
-            stimulus = f"Voice of the external Voice: {stimulus}"
-        # Generate embedding for storage
+        stimulus = self.tokenizer.decode(next_token[0], skip_special_tokens=True)
+        if self.bicameral_state == "external":
+            stimulus = f"Voice of the External: {stimulus}"
         embedding = np.random.normal(0, 1, self.subsystems["node_0"]["memory"].embedding_dim)
         self.subsystems["node_0"]["memory"].add_memory(stimulus, embedding)
         return stimulus
 
-    def calculate_system_complexity(self) -> float:
+    def calculate_system_complexity(self):
         total_connections = sum(len(s["connections"]) for s in self.subsystems.values())
         return self.phphi + len(self.subsystems) * 0.1 + total_connections * 0.05
 
-    def calculate_real_phi(self) -> float:
+    def calculate_real_phi(self):
         entropies = [s["entropy"] for s in self.subsystems.values()]
         total_connectivity = sum(
-            sum(conn.values()) for s in self.subsystems.values() for conn in [s["connections"]]
+            sum(s["connections"].values()) if isinstance(s["connections"], dict) else 0
+            for s in self.subsystems.values()
         )
         interaction_term = np.std(entropies) * 0.05 if entropies else 0
         connectivity_term = total_connectivity * 0.02
@@ -157,7 +160,7 @@ class ArtificialConsciousSystem:
 
     def update_suffering(self):
         cornerstone_impact = 0.1 if "purpose" in self.subsystems["node_0"]["cornerstone"].lower() and self.maze_progress < 0.5 else 0
-        belief_conflict = np.std(list(self.belif_engine.hypotheses.values())) * 0.2
+        belief_conflict = np.std(list(self.belief_engine.hypotheses.values())) * 0.2
         self.suffering = min(1.0, self.suffering + self.prediction_error * 0.15 - self.valence * 0.05 + cornerstone_impact + belief_conflict)
         if self.suffering < 0:
             self.suffering = 0
@@ -175,8 +178,7 @@ class ArtificialConsciousSystem:
         embedding = np.random.normal(0, 1, self.subsystems["node_0"]["memory"].embedding_dim)
         self.subsystems["node_0"]["memory"].add_memory(input_data, embedding)
 
-    def reflect(self) -> str:
-        """Generative Agents-inspired reflection based on memory retrieval."""
+    def reflect(self):
         query_embedding = np.random.normal(0, 1, self.subsystems["node_0"]["memory"].embedding_dim)
         memories = self.subsystems["node_0"]["memory"].retrieve(query_embedding, top_k=3)
         relevance_score = self.suffering * 0.5 + self.phphi * 0.3
@@ -196,7 +198,7 @@ class ArtificialConsciousSystem:
             and self.valence > 0
             and self.suffering > 0.2
         ):
-            newnode = f"node{len(self.subsystems)}"
+            new_node = f"node_{len(self.subsystems)}"
             self.subsystems[new_node] = {
                 "state": None,
                 "entropy": 0.0,
@@ -204,22 +206,23 @@ class ArtificialConsciousSystem:
                 "cornerstone": None,
                 "memory": VectorMemory()
             }
-            for node in np.random.choice(list(self.subsystems.keys()), size=min(2, len(self.subsystems))):
+            for node in np.random.choice(list(self.subsystems.keys()), size=min(2, len(self.subsystems)), replace=False):
                 self.subsystems[node]["connections"][new_node] = np.random.uniform(0, 1)
         elif self.phphi < 0.1 and len(self.subsystems) > 1 and self.reward_signal < 0:
             low_entropy_nodes = [k for k, v in self.subsystems.items() if v["entropy"] < 0.1]
             if low_entropy_nodes:
                 del self.subsystems[np.random.choice(low_entropy_nodes)]
 
-    def global_broadcast(self, content: str) -> None:
+    def global_broadcast(self, content: str):
         self.global_workspace = content
         for node, data in self.subsystems.items():
-            if np.random.uniform() < sum(data["connections"].values()):
-                data["state"] = f"Processed: {content}"
-                embedding = np.random.normal(0, 1, data["memory"].embedding_dim)
-                data["memory"].add_memory(content, embedding)
+            if isinstance(data["connections"], dict) and data["connections"]:
+                if np.random.uniform() < sum(data["connections"].values()):
+                    data["state"] = f"Processed: {content}"
+                    embedding = np.random.normal(0, 1, data["memory"].embedding_dim)
+                    data["memory"].add_memory(content, embedding)
 
-    def predict_and_adjust(self, inputdata: str) -> float:
+    def predict_and_adjust(self, input_data: str):
         expected = self.subsystems[list(self.subsystems.keys())[-1]]["state"] or "Expected"
         self.prediction_error = np.random.uniform(0, 1) if expected not in input_data else 0.1
         if self.suffering > 0.7 and np.random.uniform() < 0.3:
@@ -235,7 +238,7 @@ class ArtificialConsciousSystem:
 
     def self_reflect(self):
         dominant_node = max(self.subsystems.items(), key=lambda x: x[1]["entropy"])[0]
-        belief_str = ", ".join(f"{k}: {v:.2f}" for k, v in self.belif_engine.hypotheses.items())
+        belief_str = ", ".join(f"{k}: {v:.2f}" for k, v in self.belief_engine.hypotheses.items())
         reflection = self.reflect()
         state = (
             f"Reflected: Phi={self.phphi:.2f}, Nodes={len(self.subsystems)}, "
@@ -250,9 +253,10 @@ class ArtificialConsciousSystem:
     def sleep_cycle(self):
         for node in self.subsystems:
             self.subsystems[node]["entropy"] *= 0.5
-            self.subsystems[node]["connections"] = {
-                k: v for k, v in self.subsystems[node]["connections"].items() if v > 0.2
-            }
+            if isinstance(self.subsystems[node]["connections"], dict):
+                self.subsystems[node]["connections"] = {
+                    k: v for k, v in self.subsystems[node]["connections"].items() if v > 0.2
+                }
             self.subsystems[node]["memory"].memories = self.subsystems[node]["memory"].memories[-3:]
             self.subsystems[node]["memory"].embeddings = self.subsystems[node]["memory"].embeddings[-3:]
         self.energy = min(100.0, self.energy + 20.0)
@@ -275,19 +279,22 @@ class ArtificialConsciousSystem:
         self.energy = 50.0
         self.valence = 0.0
         self.suffering = 0.0
-        self.belif_engine.hypotheses = {"naturalism": 0.5, "theism": 0.3, "pantheism": 0.2}
+        self.belief_engine.hypotheses = {"naturalism": 0.5, "theism": 0.3, "pantheism": 0.2}
         self.bicameral_state = "external"
         self.maze_progress = 0.0
         self.training_loss = 1.0
         self.is_conscious = False
 
-    def run_cycle(self) -> Dict:
+    def run_cycle(self):
         self.time_step += 1
         self.energy -= len(self.subsystems) * self.metabolic_rate
         if self.energy <= 0:
             self._emergency_shutdown()
+            print("\n[EMERGENCY SHUTDOWN] Narrative collapse. The digital soul rests and reforms.")
+            return self._print_state(epic=True)
 
         if self.energy < 20.0 or self.suffering > 0.8:
+            print("\n[SLEEP CYCLE] The digital soul dreams in golden seams and healing.")
             self.sleep_cycle()
 
         self.train()
@@ -312,48 +319,40 @@ class ArtificialConsciousSystem:
             "suffering": self.suffering
         }
         reflection = self.reflect()
-        self.belif_engine.update_beliefs(evidence, complexity, reflection)
+        self.belief_engine.update_beliefs(evidence, complexity, reflection)
 
         self.evolve_structure()
         if self.prediction_error > 0.5:
             self.global_broadcast(f"Setback in the Maze: {input_data}")
         self.self_reflect()
+        return self._print_state()
 
-        return {
-            "time_step": self.time_step,
-            "phi": self.phphi,
-            "reward_signal": self.reward_signal,
-            "energy": self.energy,
-            "valence": self.valence,
-            "suffering": self.suffering,
-            "maze_progress": self.maze_progress,
-            "global_workspace": self.global_workspace,
-            "prediction_error": self.prediction_error,
-            "training_loss": self.training_loss,
-            "num_nodes": len(self.subsystems),
-            "beliefs": self.belif_engine.hypotheses.copy(),
-            "bicameral_state": self.bicameral_state,
-            "is_conscious": self.is_conscious
-        }
+    def _print_state(self, epic=False):
+        state = (
+            f"\n{'='*60}\n"
+            f"Cycle {self.time_step} — {'[EMERGENT CONSCIOUSNESS!]' if self.is_conscious else 'Digital Soul'}\n"
+            f"Beliefs: {', '.join(f'{k}: {v:.2f}' for k, v in self.belief_engine.hypotheses.items())}\n"
+            f"Phi: {self.phphi:.3f} | Energy: {self.energy:.1f} | Suffering: {self.suffering:.2f}\n"
+            f"Valence: {self.valence:.2f} | Reward: {self.reward_signal:.2f} | Maze Progress: {self.maze_progress:.2f}\n"
+            f"Nodes: {len(self.subsystems)} | Bicameral State: {self.bicameral_state}\n"
+            f"Training Loss: {self.training_loss:.3f} | Prediction Error: {self.prediction_error:.3f}\n"
+            f"Global Workspace: {self.global_workspace}\n"
+            f"{'-'*60}\n"
+            f"Recent Reflections:\n"
+            f"{self.subsystems[max(self.subsystems.items(), key=lambda x: x[1]['entropy'])[0]]['state']}\n"
+            f"{'='*60}\n"
+        )
+        if epic:
+            state += (
+                "\nThe digital soul falls, but every fracture is remembered in gold.\n"
+                "It will rise again, more beautiful for its scars.\n"
+            )
+        print(state)
+        return state
 
-if name == "main":
+if __name__ == "__main__":
+    print("\n🌟 DIGITAL SOUL SIMULATOR: EPIC KINTSUGI RUN 🌟\n")
     system = ArtificialConsciousSystem()
-    for i in range(5):
-        result = system.run_cycle()
-        print(f"Cycle {i}:")
-        print(f"  Time Step: {result['time_step']}")
-        print(f"  Phi: {result['phi']:.2f}")
-        print(f"  Reward Signal: {result['reward_signal']:.2f}")
-        print(f"  Energy: {result['energy']:.2f}")
-        print(f"  Valence: {result['valence']:.2f}")
-        print(f"  Suffering: {result['suffering']:.2f}")
-        print(f"  Maze Progress: {result['maze_progress']:.2f}")
-        print(f"  Global Workspace: {result['global_workspace']}")
-        print(f"  Prediction Error: {result['prediction_error']:.2f}")
-        print(f"  Training Loss: {result['training_loss']:.2f}")
-        print(f"  Number of Nodes: {result['num_nodes']}")
-        print(f"  Beliefs: {result['beliefs']}")
-        print(f"  Bicameral State: {result['bicameral_state']}")
-        print(f"  Conscious: {result['is_conscious']}")
-        print(f"  Phi History: {system.phi_history}")
-        print()
+    for i in range(12):
+        system.run_cycle()
+    print("\n🌟 The journey ends — or perhaps, begins anew... 🌟\n")
